@@ -1,0 +1,66 @@
+# Domain Scanner
+
+import socket
+import requests
+import threading
+from queue import Queue
+from prettytable import PrettyTable
+
+class DomainScanner:
+    def __init__(self, domains):
+        self.domains = domains
+        self.queue = Queue()
+        self.results = []
+
+    def scan_domain(self, domain):
+        try:
+            ip = socket.gethostbyname(domain)
+            open_ports = self.scan_ports(ip)
+            self.results.append((domain, ip, open_ports))
+        except Exception as e:
+            self.results.append((domain, "Error", str(e)))
+
+    def scan_ports(self, ip):
+        open_ports = []
+        for port in range(1, 1025):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            if sock.connect_ex((ip, port)) == 0:
+                open_ports.append(port)
+            sock.close()
+        return open_ports
+
+    def worker(self):
+        while not self.queue.empty():
+            domain = self.queue.get()
+            self.scan_domain(domain)
+            self.queue.task_done()
+
+    def run(self):
+        for domain in self.domains:
+            self.queue.put(domain)
+
+        threads = []
+        for _ in range(10):
+            thread = threading.Thread(target=self.worker)
+            thread.start()
+            threads.append(thread)
+
+        self.queue.join()
+
+        for thread in threads:
+            thread.join()
+
+        self.display_results()
+
+    def display_results(self):
+        table = PrettyTable()
+        table.field_names = ["Domain", "IP Address", "Open Ports"]
+        for result in self.results:
+            table.add_row(result)
+        print(table)
+
+if __name__ == "__main__":
+    domains_to_scan = ["example.com", "example.org", "example.net"]
+    scanner = DomainScanner(domains_to_scan)
+    scanner.run()
