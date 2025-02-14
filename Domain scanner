@@ -1,9 +1,9 @@
-from flask import Flask, render_template, request
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
 import sublist3r
 import dns.resolver
 import socket
-
-app = Flask(__name__)
+import threading
 
 def get_subdomains(domain):
     subdomains = sublist3r.main(domain, 40, savefile=None, ports=None, silent=True, verbose=False, enable_bruteforce=False, engines=None)
@@ -42,14 +42,53 @@ def scan_domain(domain, ports):
     
     return results
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    results = []
-    if request.method == 'POST':
-        domain = request.form['domain']
+def start_scan():
+    domain = domain_entry.get()
+    if not domain:
+        messagebox.showerror("Error", "Please enter a domain")
+        return
+    
+    results_display.delete(1.0, tk.END)
+    results_display.insert(tk.END, "Scanning...\n")
+    
+    def run_scan():
         ports = [21, 22, 23, 25, 53, 80, 110, 443, 445, 1433, 1521, 3306, 3389, 5432, 5900, 8080]  # Common ports
         results = scan_domain(domain, ports)
-    return render_template('index.html', results=results)
+        display_results(results)
+    
+    threading.Thread(target=run_scan).start()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+def display_results(results):
+    results_display.delete(1.0, tk.END)
+    for subdomain, ip, open_ports in results:
+        results_display.insert(tk.END, f"Subdomain: {subdomain}\n")
+        results_display.insert(tk.END, f"IP: {ip}\n")
+        results_display.insert(tk.END, f"Open Ports: {', '.join(map(str, open_ports))}\n")
+        results_display.insert(tk.END, '-' * 40 + '\n')
+
+app = tk.Tk()
+app.title("Mass Subdomain Scanner")
+
+frame = ttk.Frame(app, padding="10")
+frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+domain_label = ttk.Label(frame, text="Domain:")
+domain_label.grid(row=0, column=0, sticky=tk.W)
+
+domain_entry = ttk.Entry(frame, width=50)
+domain_entry.grid(row=0, column=1, sticky=(tk.W, tk.E))
+domain_entry.focus()
+
+scan_button = ttk.Button(frame, text="Scan", command=start_scan)
+scan_button.grid(row=0, column=2, sticky=tk.W)
+
+results_display = scrolledtext.ScrolledText(frame, width=80, height=20, wrap=tk.WORD)
+results_display.grid(row=1, column=0, columnspan=3, pady=10)
+
+for child in frame.winfo_children():
+    child.grid_configure(padx=5, pady=5)
+
+app.columnconfigure(0, weight=1)
+app.rowconfigure(0, weight=1)
+
+app.mainloop()
